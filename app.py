@@ -64,7 +64,8 @@ from core.export import build_high_confidence_csv, build_json, build_review_xlsx
 
 @st.cache_data(show_spinner=False)
 def _cached_read_crawl(file_bytes: bytes, filename: str) -> pd.DataFrame:
-    return read_crawl(io.BytesIO(file_bytes))
+    # Pass filename explicitly: BytesIO has no .name, so XLSX detection requires it.
+    return read_crawl(io.BytesIO(file_bytes), filename=filename)
 
 
 @st.cache_data(show_spinner=False)

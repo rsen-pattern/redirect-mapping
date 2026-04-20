@@ -37,13 +37,20 @@ def build_review_xlsx(
         _write_sheet(writer, review, "Needs Review")
         _write_sheet(writer, no_match, "No Match")
 
-        # Per-method sheets
+        # Per-method sheets — one sheet per known matcher name, not per unique combination.
+        # Use token-aware containment (split on comma) so "h1" never matches "h12" or "h1,title".
         method_col = "methods_contributed" if "methods_contributed" in results_df.columns else None
         if method_col:
-            for method in results_df[method_col].dropna().unique():
-                subset = results_df[results_df[method_col].str.contains(str(method), na=False)]
-                sheet_name = f"By Method: {str(method)[:22]}"
-                _write_sheet(writer, subset, sheet_name)
+            known_methods = [
+                "exact_slug", "path", "slug", "title", "h1", "h2", "inlinks", "mode_b",
+            ]
+            for method in known_methods:
+                mask = results_df[method_col].dropna().apply(
+                    lambda s: method in {t.strip() for t in str(s).split(",")}
+                )
+                if mask.any():
+                    sheet_name = f"Method_{method}"[:31]
+                    _write_sheet(writer, results_df[mask], sheet_name)
 
         if ai_df is not None and not ai_df.empty:
             _write_sheet(writer, ai_df, "AI Decisions")

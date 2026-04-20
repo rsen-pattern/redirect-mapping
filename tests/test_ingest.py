@@ -136,3 +136,28 @@ def test_encoding_error_handled_gracefully(tmp_path):
     with open(p, "rb") as f:
         df = read_crawl(f)
     assert len(df) >= 1
+
+
+def test_read_crawl_xlsx_via_bytesio(tmp_path):
+    """XLSX uploaded through BytesIO (Streamlit path) must be read correctly.
+
+    BytesIO has no .name attribute, so read_crawl requires an explicit filename
+    to detect the XLSX format. This test exercises that path.
+    """
+    import io as _io
+    import openpyxl
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    headers = ["Address", "Status Code", "Content Type", "H1-1", "Title 1"]
+    ws.append(headers)
+    ws.append(["https://example.com/page", 200, "text/html", "Test H1", "Test Title"])
+
+    buf = _io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    df = read_crawl(buf, filename="crawl.xlsx")
+    assert "Address" in df.columns
+    assert len(df) == 1
+    assert df["Address"].iloc[0] == "https://example.com/page"

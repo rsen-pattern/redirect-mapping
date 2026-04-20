@@ -13,13 +13,15 @@ from core.schema import (
 )
 
 
-def read_crawl(file) -> pd.DataFrame:
+def read_crawl(file, filename: str | None = None) -> pd.DataFrame:
     """Read a Screaming Frog crawl CSV or XLSX upload.
 
-    Accepts a Streamlit UploadedFile or any file-like object / path string.
+    Accepts a Streamlit UploadedFile, a file-like object, or a path string.
+    Pass filename explicitly when file is a BytesIO (which has no .name attribute)
+    so that XLSX detection works correctly.
     Preserves original column names — call auto_map_columns + apply_mapping to normalise.
     """
-    name = getattr(file, "name", "") or ""
+    name = filename or getattr(file, "name", "") or ""
     if hasattr(file, "read"):
         content = file.read()
     else:

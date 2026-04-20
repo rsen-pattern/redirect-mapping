@@ -257,43 +257,47 @@ def match_mode_b(
         "title_h1_best": 0.20,
         "breadcrumb": 0.10,
     }
-    w = weights or _default_weights
+    w = dict(weights or _default_weights)
 
     retired_urls = list(retired_df["address"])
     coll_urls = list(collections_df["address"])
 
-    # Pre-compute TF-IDF scores for title/H1 (best-of)
-    title_df = match_tfidf(retired_df, collections_df, "title", "title", top_k=len(coll_urls))
-    h1_df = match_tfidf(retired_df, collections_df, "h1", "h1", top_k=len(coll_urls))
-
-    def _tfidf_score(lu: str, cu: str) -> float:
-        t = title_df[(title_df["legacy_url"] == lu) & (title_df["candidate_url"] == cu)]
-        h = h1_df[(h1_df["legacy_url"] == lu) & (h1_df["candidate_url"] == cu)]
-        ts = float(t["score"].iloc[0]) if not t.empty else 0.0
-        hs = float(h["score"].iloc[0]) if not h.empty else 0.0
-        return max(ts, hs)
+    # Pre-compute TF-IDF scores into O(1) dicts — avoids 200k Pandas filter ops in the loop.
+    title_raw = match_tfidf(retired_df, collections_df, "title", "title", top_k=len(coll_urls))
+    h1_raw = match_tfidf(retired_df, collections_df, "h1", "h1", top_k=len(coll_urls))
+    title_lookup: dict[tuple[str, str], float] = {
+        (row.legacy_url, row.candidate_url): row.score
+        for row in title_raw.itertuples(index=False)
+    }
+    h1_lookup: dict[tuple[str, str], float] = {
+        (row.legacy_url, row.candidate_url): row.score
+        for row in h1_raw.itertuples(index=False)
+    }
 
     has_breadcrumb = "breadcrumb" in retired_df.columns
     if not has_breadcrumb:
-        # Redistribute breadcrumb weight to title_h1_best
-        w = dict(w)
         w["title_h1_best"] = w.get("title_h1_best", 0.20) + w.pop("breadcrumb", 0.10)
+
+    # Breadcrumb lookup: retired_url → breadcrumb string
+    breadcrumb_lookup: dict[str, str] = {}
+    if has_breadcrumb:
+        breadcrumb_lookup = dict(
+            zip(retired_df["address"].astype(str), retired_df["breadcrumb"].astype(str))
+        )
 
     rows: list[dict] = []
     for lu in retired_urls:
         l_set = inlinks_map.get(str(lu), set())
-        retired_row = retired_df[retired_df["address"] == lu]
+        bc_str = breadcrumb_lookup.get(lu, "")
 
         scores: list[tuple[str, float]] = []
         for cu in coll_urls:
             inlink_score = jaccard(l_set, inlinks_map.get(str(cu), set())) if l_set else 0.0
             ancestor_score = _url_ancestor_score(lu, cu)
-            tfidf_score = _tfidf_score(lu, cu)
-
-            breadcrumb_score = 0.0
-            if has_breadcrumb and not retired_row.empty:
-                bc = str(retired_row["breadcrumb"].iloc[0])
-                breadcrumb_score = 1.0 if cu in bc else 0.0
+            ts = title_lookup.get((lu, cu), 0.0)
+            hs = h1_lookup.get((lu, cu), 0.0)
+            tfidf_score = max(ts, hs)
+            breadcrumb_score = 1.0 if (has_breadcrumb and cu in bc_str) else 0.0
 
             combined = (
                 inlink_score * w.get("inlink_overlap", 0.40)

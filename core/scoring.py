@@ -101,9 +101,9 @@ def combine_matcher_results(
     if all_candidates.empty:
         return pd.DataFrame(columns=["legacy_url", "candidate_url", "combined_score", "methods"])
 
-    all_candidates["weighted_score"] = all_candidates.apply(
-        lambda r: r["score"] * weights.get(r["method"], 0.0),
-        axis=1,
+    # Vectorised: map() broadcasts over the column in C, not Python row-by-row.
+    all_candidates["weighted_score"] = (
+        all_candidates["score"] * all_candidates["method"].map(weights).fillna(0.0)
     )
 
     grouped = all_candidates.groupby(["legacy_url", "candidate_url"]).agg(
@@ -132,12 +132,8 @@ def pick_winners(combined: pd.DataFrame) -> pd.DataFrame:
         second_score = float(sorted_group.iloc[1]["combined_score"]) if len(sorted_group) > 1 else 0.0
         top_score = float(top["combined_score"])
 
-        # exact_slug rows are never ambiguous
         methods = str(top.get("methods", ""))
-        if "exact_slug" in methods:
-            is_ambiguous = False
-        else:
-            is_ambiguous = top_score < 0.90 or (top_score - second_score) < 0.05
+        is_ambiguous = top_score < 0.90 or (top_score - second_score) < 0.05
 
         rows.append({
             "legacy_url": legacy_url,

@@ -56,6 +56,7 @@ from core.collections import (
 from core.inlinks import load_inlinks
 from core.ai_layer import disambiguate_batch
 from core.export import build_high_confidence_csv, build_json, build_review_xlsx
+from utils.bifrost import get_api_key
 
 
 # ---------------------------------------------------------------------------
@@ -157,11 +158,12 @@ def _render_sidebar(models_config: dict) -> dict:
     api_key_input = st.sidebar.text_input(
         "Bi Frost API Key",
         type="password",
-        help="Your Bi Frost API key. Also readable from BIFROST_API_KEY env var.",
+        help="Your Bi Frost API key. Also readable from BIFROST_API_KEY env var or st.secrets.",
     )
     if api_key_input:
         st.session_state["bifrost_api_key"] = api_key_input
-    cfg["api_key"] = st.session_state.get("bifrost_api_key", "")
+    # Fall back to secrets/env so Streamlit Cloud deployments work without sidebar input.
+    cfg["api_key"] = st.session_state.get("bifrost_api_key") or get_api_key() or ""
 
     model_options = [(m["label"], m["id"]) for m in models_config["models"]]
     model_labels = [m[0] for m in model_options]

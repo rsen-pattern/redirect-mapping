@@ -1,0 +1,11 @@
+Address,Status Code,Content Type,Indexability,Title 1,Meta Description 1,H1-1,H1-2,H2-1,H2-2,Word Count,Crawl Depth,Inlinks,Unique Inlinks,Outlinks
+https://newsite.example.com/product/pegasus-40,200,text/html,Indexable,Nike Pegasus 40 Running Shoes | New Site,Lightweight and responsive running shoes.,Nike Pegasus 40,,Best Running Shoes 2024,,870,3,48,43,13
+https://newsite.example.com/product/speedgoat-5,200,text/html,Indexable,Hoka Speedgoat 5 Trail Running | New Site,Built for the most demanding trails.,Hoka Speedgoat 5,,Trail Running Shoes,,940,3,40,37,11
+https://newsite.example.com/collections/running-shoes,200,text/html,Indexable,Running Shoes - Shop All Styles | New Site,Find your perfect running shoe.,Running Shoes,,Best Sellers,,1250,2,130,118,90
+https://newsite.example.com/guides/how-to-choose-running-shoes,200,text/html,Indexable,How to Choose Running Shoes - Expert Guide,Expert guide to finding the right fit.,How to Choose Running Shoes,,Cushioning vs Responsiveness,,2150,3,25,23,9
+https://newsite.example.com/product/ghost-15,200,text/html,Indexable,Brooks Ghost 15 Road Running Shoe | New Site,The perfect everyday trainer.,Brooks Ghost 15,,Everyday Training Shoes,,800,3,52,47,12
+https://newsite.example.com/about-us,200,text/html,Indexable,About Us - Running Gear Store,Learn about our passion for running.,About Us,,Our Story,,460,2,16,15,7
+https://newsite.example.com/contact-us,200,text/html,Indexable,Contact Us | Get in Touch,Get in touch with our team.,Contact Us,,,, 310,2,13,12,5
+https://newsite.example.com/product/vibram-five,200,text/html,Indexable,Vibram FiveFingers Running Shoe | New Site,Barefoot running sensation.,Vibram FiveFingers,,Minimalist Running,,670,3,20,18,10
+https://newsite.example.com/collections/trail-shoes,200,text/html,Indexable,Trail Running Shoes - All Styles | New Site,Conquer any terrain.,Trail Running Shoes,,Shop By Brand,,1000,2,100,92,75
+https://newsite.example.com/collections/minimalist-shoes,200,text/html,Indexable,Minimalist Running Shoes Collection,For the natural running movement.,Minimalist Running Shoes,,Top Picks,,750,2,60,55,50

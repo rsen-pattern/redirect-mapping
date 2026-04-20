@@ -1,0 +1,11 @@
+Address,Status Code,Content Type,Indexability,Title 1,Meta Description 1,H1-1,H1-2,H2-1,H2-2,Word Count,Crawl Depth,Inlinks,Unique Inlinks,Outlinks
+https://legacy.example.com/shoes/running/pegasus-40,200,text/html,Indexable,Nike Pegasus 40 Running Shoes,Lightweight and responsive running shoes.,Nike Pegasus 40,,Best Running Shoes 2024,,850,3,45,40,12
+https://legacy.example.com/shoes/trail/speedgoat-5,200,text/html,Indexable,Hoka Speedgoat 5 Trail Running,Built for the most demanding trails.,Hoka Speedgoat 5,,Trail Running Shoes,,920,3,38,35,10
+https://legacy.example.com/category/running-shoes,200,text/html,Indexable,Running Shoes - Shop All Styles,Find your perfect running shoe.,Running Shoes,,Best Sellers,,1200,2,120,110,85
+https://legacy.example.com/blog/how-to-choose-running-shoes,200,text/html,Indexable,How to Choose Running Shoes,Expert guide to finding the right fit.,How to Choose Running Shoes,,Cushioning vs Responsiveness,,2100,3,22,20,8
+https://legacy.example.com/shoes/road/ghost-15,200,text/html,Indexable,Brooks Ghost 15 Road Running Shoe,The perfect everyday trainer.,Brooks Ghost 15,,Everyday Training Shoes,,780,3,50,45,11
+https://legacy.example.com/about,200,text/html,Indexable,About Us - Running Gear Store,Learn about our passion for running.,About Us,,Our Story,,450,2,15,14,6
+https://legacy.example.com/contact,200,text/html,Indexable,Contact Us,Get in touch with our team.,Contact Us,,,, 300,2,12,11,4
+https://legacy.example.com/shoes/minimalist/vibram-five,200,text/html,Indexable,Vibram FiveFingers Running Shoe,Barefoot running sensation.,Vibram FiveFingers,,Minimalist Running,,650,3,18,16,9
+https://legacy.example.com/old-product-no-match,200,text/html,Indexable,Discontinued Model XYZ,This product is no longer available.,Discontinued Model XYZ,,,,200,4,3,3,2
+https://legacy.example.com/category/trail-shoes,200,text/html,Indexable,Trail Running Shoes - All Styles,Conquer any terrain.,Trail Running Shoes,,Shop By Brand,,980,2,95,88,72

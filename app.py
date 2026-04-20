@@ -709,6 +709,25 @@ def main() -> None:
             st.session_state.results_df = None
             st.rerun()
 
+    with st.expander("❓ Not sure which mode to use?"):
+        st.markdown("""
+| Scenario | Mode |
+|---|---|
+| Replatforming (Magento → Shopify, WordPress → Webflow, etc.) | 🔀 Site Migration |
+| URL structure changed but content is mostly the same | 🔀 Site Migration |
+| Domain change (`.com.au` → `.com/au/`) | 🔀 Site Migration |
+| IA overhaul — categories restructured, content carried over | 🔀 Site Migration |
+| Merging two sites into one | 🔀 Site Migration ×2 (one pass per source site) |
+| Products discontinued / out of stock on a live site | 🗑️ Product Retirement |
+| Seasonal or range-specific products retiring | 🗑️ Product Retirement |
+| Blog archive cleanup — old posts redirecting to topic hubs | 🗑️ Product Retirement |
+| "We deleted 80% of the site" | Both — Retirement for deletions, Migration for survivors |
+
+**The key question:** are dead URLs being replaced 1-to-1 by successor URLs?
+- **Yes** → Site Migration
+- **No, they're being collapsed into parent pages** → Product Retirement
+        """)
+
     cfg = _render_sidebar(models_config)
 
     if st.session_state.mode == "migration":

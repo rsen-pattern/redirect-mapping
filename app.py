@@ -216,8 +216,74 @@ def _render_sidebar(models_config: dict) -> dict:
 # Mode A — Site Migration
 # ---------------------------------------------------------------------------
 
+def _render_instructions_mode_a() -> None:
+    with st.expander("📖 How to use — Site Migration", expanded=False):
+        st.markdown("""
+**Use this mode when:** you're moving URLs from an old site to a new one (replatform, URL restructure, domain change).
+
+**Step 1 — Screaming Frog exports**
+- Legacy crawl: *Internal → HTML → Export* on the old site
+- New crawl: same on the new site (crawl staging if pre-launch)
+- Inlinks *(optional)*: *Bulk Export → All Inlinks* — enables a 6th signal for harder cases
+
+**Step 2 — Upload and configure**
+- Upload both crawls above. Column names are auto-detected from Screaming Frog defaults.
+- Sidebar defaults are sensible for most migrations. Key knobs:
+  - **Exact-slug pre-pass** — resolves 50–80% of URLs instantly at 1.0 confidence. Leave on.
+  - **Signal weights** — drop H1 weight if your H1s are templated; push path/slug up if URL structure is deliberately preserved.
+
+**Step 3 — Run and read results**
+- **Pre-pass resolved** — done, don't touch.
+- **High confidence ≥ 0.90** — safe to redirect in bulk; spot-check 10 random rows.
+- **Needs review 0.70–0.90** — manual eyeballs required, or run AI tiebreak.
+- **No match < 0.70** — likely no good target; consider 410 Gone or a category/homepage redirect.
+- **Ambiguous** — top two candidates too close to call; AI tiebreak handles these.
+
+**Step 4 — Export**
+- **High-confidence CSV** → feed directly into your redirect system (htaccess, Cloudflare, CMS rules).
+- **Full review XLSX** → multi-sheet workbook for client review (per-tier sheets + per-matcher sheets).
+- **JSON** → archive or scripting.
+        """)
+
+
+def _render_instructions_mode_b() -> None:
+    with st.expander("📖 How to use — Product Retirement", expanded=False):
+        st.markdown("""
+**Use this mode when:** dead URLs on a live site need to redirect to their closest living parent (e.g. out-of-stock products → category pages).
+
+**Step 1 — Screaming Frog exports**
+- Site crawl: *Internal → HTML → Export* on the live site
+- Inlinks: *Bulk Export → All Inlinks* — **required** for Mode B scoring
+- Retired URL list: plain `.txt` (one URL per line) or CSV with a `url` column
+
+**Step 2 — Define collection pages** *(the redirect targets)*
+
+Pick one or more detection methods:
+- **URL patterns** — glob patterns like `/collections/*` or `/category/*`
+- **Segment upload** — CSV from Screaming Frog Segments with `url` + `segment` columns
+- **Auto-detect** — heuristic: high outlinks + above-median inlinks + shallow depth
+
+Preview the detected set before running; deselect false positives.
+
+**Step 3 — Scoring signals**
+
+Each retired URL is scored against every collection on:
+
+| Signal | Weight | What it measures |
+|---|---|---|
+| Inlink overlap (Jaccard) | 0.40 | Shared inlink sources |
+| URL ancestor | 0.30 | Is collection a path ancestor? |
+| Title/H1 TF-IDF | 0.20 | Semantic similarity |
+| Breadcrumb | 0.10 | Collection in page breadcrumb |
+
+**Step 4 — Read and export** — same tier logic as Mode A.
+High-confidence CSV is directly actionable. Needs Review rows are typically "which of two categories is the right parent" — run AI tiebreak to resolve.
+        """)
+
+
 def _render_mode_a(cfg: dict) -> None:
     st.header("Site Migration — Redirect Map")
+    _render_instructions_mode_a()
 
     col1, col2 = st.columns(2)
     with col1:
@@ -313,6 +379,7 @@ def _render_mode_a(cfg: dict) -> None:
 
 def _render_mode_b(cfg: dict) -> None:
     st.header("Product Retirement — Collection Redirect Map")
+    _render_instructions_mode_b()
 
     st.subheader("1. Site crawl")
     site_df = _upload_and_ingest("Upload site crawl (CSV/XLSX)", "site_b", "site_mapping_b")

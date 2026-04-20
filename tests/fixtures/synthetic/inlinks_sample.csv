@@ -1,0 +1,21 @@
+Source,Destination,Type,Text,Alt Text,Follow,Target,Rel,Status Code,Status
+https://legacy.example.com/,https://legacy.example.com/shoes/running/pegasus-40,HREF,Shop Pegasus 40,,true,,, 200,OK
+https://legacy.example.com/category/running-shoes,https://legacy.example.com/shoes/running/pegasus-40,HREF,Nike Pegasus 40,,true,,,200,OK
+https://legacy.example.com/blog/how-to-choose-running-shoes,https://legacy.example.com/shoes/running/pegasus-40,HREF,Pegasus 40,,true,,,200,OK
+https://legacy.example.com/,https://legacy.example.com/shoes/trail/speedgoat-5,HREF,Speedgoat 5,,true,,,200,OK
+https://legacy.example.com/category/trail-shoes,https://legacy.example.com/shoes/trail/speedgoat-5,HREF,Hoka Speedgoat,,true,,,200,OK
+https://legacy.example.com/,https://legacy.example.com/shoes/road/ghost-15,HREF,Ghost 15,,true,,,200,OK
+https://legacy.example.com/category/running-shoes,https://legacy.example.com/shoes/road/ghost-15,HREF,Brooks Ghost,,true,,,200,OK
+https://newsite.example.com/,https://newsite.example.com/product/pegasus-40,HREF,Shop Pegasus 40,,true,,,200,OK
+https://newsite.example.com/collections/running-shoes,https://newsite.example.com/product/pegasus-40,HREF,Nike Pegasus 40,,true,,,200,OK
+https://newsite.example.com/guides/how-to-choose-running-shoes,https://newsite.example.com/product/pegasus-40,HREF,Pegasus 40,,true,,,200,OK
+https://newsite.example.com/,https://newsite.example.com/product/speedgoat-5,HREF,Speedgoat 5,,true,,,200,OK
+https://newsite.example.com/collections/trail-shoes,https://newsite.example.com/product/speedgoat-5,HREF,Hoka Speedgoat,,true,,,200,OK
+https://newsite.example.com/,https://newsite.example.com/product/ghost-15,HREF,Ghost 15,,true,,,200,OK
+https://newsite.example.com/collections/running-shoes,https://newsite.example.com/product/ghost-15,HREF,Brooks Ghost,,true,,,200,OK
+https://legacy.example.com/sitemap,https://legacy.example.com/category/running-shoes,HREF,Running Shoes,,true,,,200,OK
+https://legacy.example.com/,https://legacy.example.com/category/trail-shoes,HREF,Trail Shoes,,true,,,200,OK
+https://legacy.example.com/sitemap,https://legacy.example.com/category/trail-shoes,HREF,Trail Running,,true,,,200,OK
+https://legacy.example.com/,https://legacy.example.com/about,HREF,About Us,,true,,,200,OK
+https://legacy.example.com/,https://legacy.example.com/contact,HREF,Contact,,true,,,200,OK
+https://newsite.example.com/sitemap,https://newsite.example.com/collections/running-shoes,HREF,Running Shoes,,true,,,200,OK

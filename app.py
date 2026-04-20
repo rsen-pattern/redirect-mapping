@@ -209,6 +209,51 @@ def _render_sidebar(models_config: dict) -> dict:
         else:
             cfg["weights"] = base_weights
 
+    st.sidebar.divider()
+
+    with st.sidebar.expander("🛟 Troubleshooting"):
+        st.markdown("""
+**Upload / ingest**
+
+*Columns not detected* — your export may have custom column names. A mapper will appear; select the correct field for each required column (`address`, `title`, `h1`).
+
+*Garbled characters in URLs* — Screaming Frog exported with Windows-1252 encoding. Re-export with UTF-8, or the app will silently replace bad characters.
+
+*"No HTML-200 rows found"* — your crawl includes redirects or non-HTML assets. In Screaming Frog use **Internal → HTML** filter before exporting.
+
+*XLSX not recognised* — make sure the file extension is `.xlsx`. Plain `.xls` (Excel 97) is not supported.
+
+---
+
+**Mode A — matching quality**
+
+*Pre-pass resolved = 0* — URL structures are completely different between old and new. Fine — the other matchers still run.
+
+*High-confidence count very low* — check: (1) HTML-200 counts look right in the upload preview; (2) H1s aren't templated/identical across pages — if so, drop H1 weight to 0.10 and push Title up to 0.45; (3) you're comparing genuinely different content (AI tiebreak helps, some manual work unavoidable).
+
+*Results dominated by path/slug* — title/H1 columns likely didn't map correctly. Re-check the column mapper after re-upload.
+
+---
+
+**Mode B — collection detection**
+
+*Auto-detect found 0 collections* — outlinks/inlinks data is empty in the crawl. Re-export from Screaming Frog with full fields, or use URL patterns instead.
+
+*Auto-detect found thousands of collections* — an outlier page (homepage, sitemap) is skewing the 90th-pct threshold. Switch to URL patterns.
+
+*Most retired URLs in No Match* — inlinks data may be sparse (especially if URLs are already 404s and have no current inlinks). Use URL patterns + title similarity as a workaround.
+
+---
+
+**AI tiebreak**
+
+*"Enter a Bi Frost API key"* — paste your key in the field above, or add `BIFROST_API_KEY = "..."` to `.streamlit/secrets.toml`.
+
+*401 error* — key is wrong or expired. Check with your Bi Frost admin.
+
+*404 / model not found* — model ID in `config/models.json` is not recognised by Bi Frost. Update the catalogue.
+        """)
+
     return cfg
 
 

@@ -521,15 +521,19 @@ def _render_mode_b(cfg: dict) -> None:
         st.info("Define at least one collection detection method to continue.")
         return
 
-    # Join retired_df with site_df for title/H1
-    retired_enriched = retired_df.merge(
-        site_df[["address", "title", "h1", "meta_description"]],
-        left_on="url",
-        right_on="address",
-        how="left",
-    ).rename(columns={"url": "address"})
-    if "address_x" in retired_enriched.columns:
-        retired_enriched = retired_enriched.rename(columns={"address_x": "address"})
+    # Join retired_df with site_df for title/H1. Drop the right-side "address"
+    # before renaming "url" so we don't end up with two "address" columns —
+    # that breaks downstream `df["address"]` Series access.
+    retired_enriched = (
+        retired_df.merge(
+            site_df[["address", "title", "h1", "meta_description"]],
+            left_on="url",
+            right_on="address",
+            how="left",
+        )
+        .drop(columns=["address"])
+        .rename(columns={"url": "address"})
+    )
 
     if st.button("▶ Run Mode B matching", type="primary"):
         with st.spinner("Matching retired products to collections..."):
@@ -537,7 +541,7 @@ def _render_mode_b(cfg: dict) -> None:
             combined_df = long_df.rename(columns={"score": "combined_score"})
             combined_df["methods"] = "mode_b"
 
-            winners_df = pick_winners(combined_df.rename(columns={"methods": "methods_contributed"}))
+            winners_df = pick_winners(combined_df)
             st.session_state.results_df = winners_df
             st.session_state.combined_df = combined_df
 

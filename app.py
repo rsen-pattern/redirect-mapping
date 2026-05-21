@@ -141,7 +141,7 @@ def _upload_and_ingest(label: str, key: str, mapping_key: str) -> pd.DataFrame |
         return None
 
     st.success(f"Loaded {len(df):,} HTML-200 rows.")
-    st.dataframe(df.head(5), use_container_width=True)
+    st.dataframe(df.head(5), width='stretch')
     return df
 
 
@@ -453,7 +453,7 @@ def _render_mode_b(cfg: dict) -> None:
         retired_df = load_retired_urls(retired_file)
         st.session_state.retired_df = retired_df
         st.success(f"Loaded {len(retired_df):,} retired URLs.")
-        st.dataframe(retired_df.head(5), use_container_width=True)
+        st.dataframe(retired_df.head(5), width='stretch')
 
     site_df = st.session_state.get("legacy_df")
     if site_df is None:
@@ -502,7 +502,7 @@ def _render_mode_b(cfg: dict) -> None:
             with st.expander("Preview collection pages"):
                 selected = st.dataframe(
                     collections_df[["address", "title", "h1"]].head(50),
-                    use_container_width=True,
+                    width='stretch',
                 )
         else:
             collections_df = None
@@ -584,7 +584,7 @@ def _render_results(results_df: pd.DataFrame, cfg: dict, mode: str) -> None:
     st.dataframe(
         results_df[display_cols],
         column_config=col_config,
-        use_container_width=True,
+        width='stretch',
     )
 
     # ---- AI tiebreak ----
@@ -693,7 +693,7 @@ def main() -> None:
     with col1:
         if st.button(
             "🔀 Site Migration",
-            use_container_width=True,
+            width='stretch',
             type="primary" if st.session_state.mode == "migration" else "secondary",
         ):
             st.session_state.mode = "migration"
@@ -702,7 +702,7 @@ def main() -> None:
     with col2:
         if st.button(
             "🗑️ Product Retirement",
-            use_container_width=True,
+            width='stretch',
             type="primary" if st.session_state.mode == "retirement" else "secondary",
         ):
             st.session_state.mode = "retirement"

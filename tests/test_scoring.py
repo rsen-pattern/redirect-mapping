@@ -128,9 +128,20 @@ def test_pick_winners_selects_highest():
     assert winners.iloc[0]["candidate_url"] == "https://b.com/1"
 
 
-def test_pick_winners_low_score_is_ambiguous():
+def test_pick_winners_low_score_no_second_not_ambiguous():
+    # No real second candidate → not ambiguous regardless of absolute score.
     combined = pd.DataFrame([
         {"legacy_url": "https://a.com/", "candidate_url": "https://b.com/1", "combined_score": 0.60, "methods": "h1"},
+    ])
+    winners = pick_winners(combined)
+    assert not winners.iloc[0]["is_ambiguous"]
+
+
+def test_pick_winners_low_score_with_close_second_is_ambiguous():
+    # Two real candidates within 0.05 → ambiguous (gap is what matters, not absolute score).
+    combined = pd.DataFrame([
+        {"legacy_url": "https://a.com/", "candidate_url": "https://b.com/1", "combined_score": 0.60, "methods": "h1"},
+        {"legacy_url": "https://a.com/", "candidate_url": "https://b.com/2", "combined_score": 0.58, "methods": "title"},
     ])
     winners = pick_winners(combined)
     assert winners.iloc[0]["is_ambiguous"]

@@ -23,8 +23,13 @@ MANIFEST
 pip-log.txt
 pip-delete-this-directory.txt
 
-# Virtual environments
+# Secrets and keys
 .env
+*.p8
+*.pem
+.tmp-template/
+
+# Virtual environments
 .venv
 env/
 venv/

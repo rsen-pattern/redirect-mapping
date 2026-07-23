@@ -1,0 +1,20 @@
+{% if preview %}
+<table class="preview-table">
+  <thead>
+    <tr>
+      {% for key in preview[0].keys() %}
+      <th>{{ key }}</th>
+      {% endfor %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in preview %}
+    <tr>
+      {% for key, value in row.items() %}
+      <td>{% if key == 'address' or key == 'url' %}<a href="{{ value }}" target="_blank" rel="noopener">{{ value }}</a>{% else %}{{ value }}{% endif %}</td>
+      {% endfor %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}

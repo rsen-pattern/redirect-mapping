@@ -20,27 +20,16 @@ def _load_models_config() -> dict:
 
 
 def get_api_key() -> str | None:
-    """Resolve Bi Frost API key. Priority: session_state → st.secrets → env vars."""
-    # 1. Streamlit session state (set by sidebar widget)
+    """Resolve Bi Frost API key from session override or environment."""
     try:
-        import streamlit as st
-        key = st.session_state.get("bifrost_api_key")
+        from flask import session
+
+        key = session.get("bifrost_api_key")
         if key:
             return key
     except Exception:
         pass
 
-    # 2. Streamlit secrets
-    try:
-        import streamlit as st
-        if "BIFROST_API_KEY" in st.secrets:
-            return st.secrets["BIFROST_API_KEY"]
-        if "BIFROST_KEY" in st.secrets:
-            return st.secrets["BIFROST_KEY"]
-    except Exception:
-        pass
-
-    # 3. Environment variables
     return os.environ.get("BIFROST_API_KEY") or os.environ.get("BIFROST_KEY")
 
 
@@ -98,9 +87,10 @@ def call_with_fallback(
 
 
 def _maybe_warn(msg: str) -> None:
-    """Show a Streamlit warning if running inside Streamlit; otherwise log."""
+    """Log a warning; show a flash message when running under Flask."""
     try:
-        import streamlit as st
-        st.warning(msg)
+        from flask import flash
+
+        flash(msg, "warning")
     except Exception:
         logger.warning(msg)

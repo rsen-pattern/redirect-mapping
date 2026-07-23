@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SEO Redirect Mapper</title>
+  <style>
+    :root {
+      --bg: #f4f6f8; --card: #fff; --border: #d9dee5; --text: #1f2933;
+      --muted: #5f6c7b; --primary: #0b5fff; --success: #d4edda;
+      --error: #f8d7da; --warning: #fff3cd;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "Segoe UI", Arial, sans-serif; background: var(--bg); color: var(--text); }
+    header {
+      background: #111827; color: #fff; padding: 16px 24px;
+      display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;
+    }
+    header h1 { margin: 0; font-size: 1.4rem; }
+    .layout { display: grid; grid-template-columns: 320px 1fr; gap: 20px; padding: 20px; max-width: 1500px; margin: 0 auto; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+    h2, h3 { margin-top: 0; }
+    label { display: block; margin: 8px 0 4px; font-size: 0.9rem; }
+    .inline-label { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+    input[type="text"], input[type="password"], input[type="number"], input[type="file"], select, textarea {
+      width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 4px;
+    }
+    button, .btn {
+      background: var(--primary); color: #fff; border: none; border-radius: 4px;
+      padding: 10px 14px; cursor: pointer; text-decoration: none; display: inline-block; font-size: 0.95rem;
+    }
+    button.secondary, .btn.secondary { background: #6b7280; }
+    button.danger { background: #b91c1c; }
+    button.active { background: #1d4ed8; }
+    .mode-toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+    .flash { padding: 12px 16px; border-radius: 6px; margin-bottom: 12px; }
+    .flash.success { background: var(--success); }
+    .flash.error { background: var(--error); }
+    .flash.warning { background: var(--warning); }
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    th, td { border: 1px solid var(--border); padding: 8px; text-align: left; vertical-align: top; }
+    .preview-table { margin-top: 8px; }
+    .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin: 12px 0; }
+    .metric { background: #f8fafc; border: 1px solid var(--border); border-radius: 6px; padding: 12px; }
+    .metric strong { display: block; font-size: 1.2rem; }
+    .muted { color: var(--muted); font-size: 0.9rem; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .export-links a { margin-right: 10px; margin-bottom: 8px; }
+    details { margin: 10px 0; border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; background: #fafbfc; }
+    details summary { cursor: pointer; font-weight: 600; }
+    .score-bar { background: #e5e7eb; border-radius: 4px; height: 8px; min-width: 60px; }
+    .score-bar span { display: block; height: 100%; background: var(--primary); border-radius: 4px; }
+    #snowflake-result { margin: 0 20px; display: none; padding: 12px; border-radius: 6px; }
+    .help-list { margin: 8px 0 0 18px; }
+    @media (max-width: 960px) { .layout, .row { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>SEO Redirect Mapper</h1>
+    <div>
+      <button type="button" id="testBtn" onclick="testConnection()">Test Snowflake Connection</button>
+      <form method="post" action="{{ url_for('mapper.reset_session') }}" style="display:inline;">
+        <button type="submit" class="danger">Clear Session</button>
+      </form>
+    </div>
+  </header>
+  <div id="snowflake-result"></div>
+
+  <div class="layout">
+    <aside>
+      <div class="card">
+        <h3>Configuration</h3>
+        <form method="post" action="{{ url_for('mapper.update_config') }}">
+          <label>Bi Frost API Key</label>
+          <input type="password" name="bifrost_api_key" placeholder="{% if api_key_set %}Key loaded — enter to override{% else %}Paste key or use .env{% endif %}">
+          <label class="inline-label"><input type="checkbox" name="clear_bifrost_key"> Clear session key override</label>
+
+          <label>Mode</label>
+          <select name="mode">
+            <option value="migration" {% if cfg.mode == 'migration' %}selected{% endif %}>Site Migration</option>
+            <option value="retirement" {% if cfg.mode == 'retirement' %}selected{% endif %}>Product Retirement</option>
+          </select>
+
+          <label class="inline-label" title="Instantly resolves URLs whose last path segment uniquely matches a new URL slug.">
+            <input type="checkbox" name="exact_slug_enabled" {% if cfg.exact_slug_enabled %}checked{% endif %}> Exact-slug pre-pass
+          </label>
+          <label class="inline-label"><input type="checkbox" name="ai_enabled" {% if cfg.ai_enabled %}checked{% endif %}> Enable AI tiebreak</label>
+          <label class="inline-label"><input type="checkbox" name="use_inlinks" {% if cfg.use_inlinks %}checked{% endif %}> Include inlink overlap</label>
+
+          <label>AI concurrency</label>
+          <input type="number" name="max_workers" min="1" max="10" value="{{ cfg.max_workers }}">
+
+          <label>Model</label>
+          <select name="model">
+            {% for model in models %}
+            <option value="{{ model.id }}" {% if model.id == cfg.model %}selected{% endif %}>{{ model.label }}</option>
+            {% endfor %}
+          </select>
+
+          <h4>Signal weights</h4>
+          {% for name, value in cfg.weights.items() %}
+          <label>{{ name }}</label>
+          <input type="hidden" name="weight_name" value="{{ name }}">
+          <input type="number" name="weight_value" min="0" max="1" step="0.05" value="{{ '%.2f'|format(value) }}">
+          {% endfor %}
+
+          <p class="muted">BiFrost: {% if api_key_set %}available{% else %}not set — add to sidebar or .env{% endif %}</p>
+          <button type="submit">Save configuration</button>
+        </form>
+      </div>
+
+      <details>
+        <summary>Troubleshooting</summary>
+        <p><strong>Upload / ingest</strong></p>
+        <ul class="help-list muted">
+          <li>Columns not detected — use the column mapper for <code>address</code>, <code>title</code>, <code>h1</code>.</li>
+          <li>Garbled URLs — re-export Screaming Frog as UTF-8.</li>
+          <li>No HTML-200 rows — filter to Internal → HTML before export.</li>
+        </ul>
+        <p><strong>Mode A</strong></p>
+        <ul class="help-list muted">
+          <li>Low high-confidence count — check column mapping and H1 weights.</li>
+          <li>Path/slug dominated — title/H1 columns likely mapped wrong.</li>
+        </ul>
+        <p><strong>Mode B</strong></p>
+        <ul class="help-list muted">
+          <li>0 collections — re-export with outlinks/inlinks or use URL patterns.</li>
+          <li>Too many collections — switch from auto-detect to URL patterns.</li>
+        </ul>
+        <p><strong>AI tiebreak</strong></p>
+        <ul class="help-list muted">
+          <li>401 — wrong/expired BiFrost key.</li>
+          <li>404 model — update <code>config/models.json</code>.</li>
+        </ul>
+      </details>
+    </aside>
+
+    <main>
+      <div class="mode-toggle">
+        <form method="post" action="{{ url_for('mapper.set_mode', mode='migration') }}">
+          <button type="submit" class="{% if cfg.mode == 'migration' %}active{% else %}secondary{% endif %}" style="width:100%;">Site Migration</button>
+        </form>
+        <form method="post" action="{{ url_for('mapper.set_mode', mode='retirement') }}">
+          <button type="submit" class="{% if cfg.mode == 'retirement' %}active{% else %}secondary{% endif %}" style="width:100%;">Product Retirement</button>
+        </form>
+      </div>
+
+      <details>
+        <summary>Not sure which mode to use?</summary>
+        <table>
+          <tr><th>Scenario</th><th>Mode</th></tr>
+          <tr><td>Replatforming / URL restructure / domain change</td><td>Site Migration</td></tr>
+          <tr><td>Products discontinued on a live site</td><td>Product Retirement</td></tr>
+          <tr><td>Deleted pages collapsing into parent categories</td><td>Product Retirement</td></tr>
+        </table>
+        <p class="muted"><strong>Key question:</strong> are dead URLs replaced 1-to-1 by successor URLs? Yes → Migration. No → Retirement.</p>
+      </details>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="flash {{ category }}">{{ message }}</div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+
+      {% if ai_fallback_message %}
+        <div class="flash warning">{{ ai_fallback_message }}</div>
+      {% endif %}
+
+      {% if pending_mapping %}
+      <div class="card">
+        <h2>Column mapper</h2>
+        <p>Map required columns for <strong>{{ pending_mapping.upload_type }}</strong> upload.</p>
+        <form method="post" action="{{ url_for('mapper.apply_mapping') }}">
+          {% for req in pending_mapping.missing %}
+          <label>Map canonical '{{ req }}' to:</label>
+          <select name="map_{{ req }}">
+            <option value="(skip)">(skip)</option>
+            {% for col in pending_mapping.columns %}
+            <option value="{{ col }}">{{ col }}</option>
+            {% endfor %}
+          </select>
+          {% endfor %}
+          <button type="submit">Apply mapping</button>
+        </form>
+        <p class="muted">Or re-upload the same file with mappings selected below.</p>
+        <form method="post" action="{{ url_for('mapper.upload') }}" enctype="multipart/form-data">
+          <input type="hidden" name="upload_type" value="{{ pending_mapping.upload_type }}">
+          {% for req in pending_mapping.missing %}
+          <input type="hidden" name="map_{{ req }}" value="">
+          {% endfor %}
+          <input type="file" name="file">
+          <button type="submit" class="secondary">Re-upload with mapping</button>
+        </form>
+      </div>
+      {% endif %}
+
+      {% if cfg.mode == 'migration' %}
+      <div class="card">
+        <h2>Site Migration — Redirect Map</h2>
+        <details>
+          <summary>How to use — Site Migration</summary>
+          <ol class="muted">
+            <li>Export legacy and new crawls from Screaming Frog (Internal → HTML).</li>
+            <li>Upload both files. Optionally upload All Inlinks for a 6th signal.</li>
+            <li>Run mechanical matching. Use AI tiebreak for ambiguous rows.</li>
+            <li>Export high-confidence CSV, full review XLSX, or JSON.</li>
+          </ol>
+        </details>
+
+        <div class="row">
+          <div>
+            <h3>Legacy site crawl</h3>
+            <form method="post" action="{{ url_for('mapper.upload') }}" enctype="multipart/form-data">
+              <input type="hidden" name="upload_type" value="legacy">
+              <input type="file" name="file" accept=".csv,.xlsx" required>
+              <button type="submit">Upload legacy crawl</button>
+            </form>
+            {% if legacy_count is not none %}<p class="muted">{{ legacy_count }} HTML-200 rows loaded</p>{% endif %}
+            {% if legacy_preview %}{% set preview = legacy_preview %}{% include 'partials/preview_table.html' %}{% endif %}
+          </div>
+          <div>
+            <h3>New site crawl</h3>
+            <form method="post" action="{{ url_for('mapper.upload') }}" enctype="multipart/form-data">
+              <input type="hidden" name="upload_type" value="new">
+              <input type="file" name="file" accept=".csv,.xlsx" required>
+              <button type="submit">Upload new crawl</button>
+            </form>
+            {% if new_count is not none %}<p class="muted">{{ new_count }} HTML-200 rows loaded</p>{% endif %}
+            {% if new_preview %}{% set preview = new_preview %}{% include 'partials/preview_table.html' %}{% endif %}
+          </div>
+        </div>
+
+        {% if cfg.use_inlinks %}
+        <h3>Inlinks export (optional)</h3>
+        <form method="post" action="{{ url_for('mapper.upload') }}" enctype="multipart/form-data">
+          <input type="hidden" name="upload_type" value="inlinks">
+          <input type="file" name="file" accept=".csv" required>
+          <button type="submit">Upload All Inlinks</button>
+        </form>
+        {% if inlinks_loaded %}<p class="muted">Inlinks index: {{ inlinks_count }} destination URLs.</p>{% endif %}
+        {% endif %}
+
+        <form method="post" action="{{ url_for('mapper.run_migration') }}">
+          <button type="submit">Run mechanical matching</button>
+        </form>
+      </div>
+      {% else %}
+      <div class="card">
+        <h2>Product Retirement — Collection Redirect Map</h2>
+        <details>
+          <summary>How to use — Product Retirement</summary>
+          <ol class="muted">
+            <li>Upload site crawl, All Inlinks (required), and retired URL list.</li>
+            <li>Define collection pages via URL patterns, segment upload, and/or auto-detect.</li>
+            <li>Preview collections, then run Mode B matching.</li>
+          </ol>
+        </details>
+
+        <h3>1. Site crawl</h3>
+        <form method="post" action="{{ url_for('mapper.upload') }}" enctype="multipart/form-data">
+          <input type="hidden" name="upload_type" value="site">
+          <input type="file" name="file" accept=".csv,.xlsx" required>
+          <button type="submit">Upload site crawl</button>
+        </form>
+        {% if site_count is not none %}<p class="muted">{{ site_count }} HTML-200 rows loaded</p>{% endif %}
+        {% if site_preview %}{% set preview = site_preview %}{% include 'partials/preview_table.html' %}{% endif %}
+
+        <h3>2. Inlinks export</h3>
+        <form method="post" action="{{ url_for('mapper.upload') }}" enctype="multipart/form-data">
+          <input type="hidden" name="upload_type" value="inlinks">
+          <input type="file" name="file" accept=".csv" required>
+          <button type="submit">Upload All Inlinks (required)</button>
+        </form>
+        {% if inlinks_loaded %}<p class="muted">Inlinks index: {{ inlinks_count }} destination URLs.</p>{% endif %}
+
+        <h3>3. Retired URLs</h3>
+        <form method="post" action="{{ url_for('mapper.upload') }}" enctype="multipart/form-data">
+          <input type="hidden" name="upload_type" value="retired">
+          <input type="file" name="file" accept=".csv,.txt" required>
+          <button type="submit">Upload retired list</button>
+        </form>
+        {% if retired_count is not none %}<p class="muted">{{ retired_count }} URLs loaded</p>{% endif %}
+        {% if retired_preview %}{% set preview = retired_preview %}{% include 'partials/preview_table.html' %}{% endif %}
+
+        <h3>4. Define collection pages</h3>
+        <form method="post" action="{{ url_for('mapper.upload') }}" enctype="multipart/form-data" style="margin-bottom:12px;">
+          <input type="hidden" name="upload_type" value="segment">
+          <label>Segments CSV (url, segment)</label>
+          <input type="file" name="file" accept=".csv">
+          <button type="submit" class="secondary">Upload segments</button>
+        </form>
+        {% if segment_uploaded %}<p class="muted">Segment file uploaded.</p>{% endif %}
+
+        <form method="post">
+          <label>Collection detection methods</label>
+          <label class="inline-label"><input type="checkbox" name="detection_methods" value="URL patterns" {% if 'URL patterns' in retirement.detection_methods %}checked{% endif %}> URL patterns</label>
+          <label class="inline-label"><input type="checkbox" name="detection_methods" value="Segment upload" {% if 'Segment upload' in retirement.detection_methods %}checked{% endif %}> Segment upload</label>
+          <label class="inline-label"><input type="checkbox" name="detection_methods" value="Auto-detect" {% if 'Auto-detect' in retirement.detection_methods %}checked{% endif %}> Auto-detect</label>
+          <label>URL path patterns (one per line, glob-style)</label>
+          <textarea name="patterns" rows="4" placeholder="/category/*&#10;/collections/*">{{ retirement.patterns }}</textarea>
+          <label>Segment name to treat as collection</label>
+          <input type="text" name="segment_name" value="{{ retirement.segment_name }}">
+          <button type="submit" formaction="{{ url_for('mapper.preview_collections') }}" class="secondary">Preview collections</button>
+          <button type="submit" formaction="{{ url_for('mapper.auto_detect_collections') }}" class="secondary">Run auto-detection only</button>
+          <button type="submit" formaction="{{ url_for('mapper.run_retirement') }}">Run Mode B matching</button>
+        </form>
+
+        {% if collection_preview %}
+        <details open>
+          <summary>Preview collection pages ({{ collection_count }} in pool)</summary>
+          {% set preview = collection_preview %}{% include 'partials/preview_table.html' %}
+        </details>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      {% if results %}
+      <div class="card">
+        <h2>Results</h2>
+        <div class="metrics">
+          <div class="metric"><span class="muted">Pre-pass resolved</span><strong>{{ summary.pre_pass }}</strong></div>
+          <div class="metric"><span class="muted">High confidence (≥0.90)</span><strong>{{ summary.high }}</strong></div>
+          <div class="metric"><span class="muted">Needs review (0.70–0.90)</span><strong>{{ summary.review }}</strong></div>
+          <div class="metric"><span class="muted">No match (&lt;0.70)</span><strong>{{ summary.no_match }}</strong></div>
+          <div class="metric"><span class="muted">Ambiguous (AI-eligible)</span><strong>{{ summary.ambiguous }}</strong></div>
+        </div>
+
+        {% if cfg.ai_enabled and summary.ambiguous > 0 %}
+        <p class="muted">AI tiebreak: {{ summary.ambiguous }} calls × ~$0.001 ≈ ${{ '%.2f'|format(ai_cost_estimate) }} (Haiku estimate)</p>
+        <form method="post" action="{{ url_for('mapper.run_ai') }}">
+          <button type="submit">Run AI tiebreak</button>
+        </form>
+        {% endif %}
+
+        {% if results_truncated %}
+        <p class="muted">Showing first {{ results|length }} of {{ results_total }} rows. Exports include all rows.</p>
+        {% endif %}
+
+        <div style="overflow:auto; max-height: 520px; margin-top: 12px;">
+          <table>
+            <thead>
+              <tr>
+                {% for key in results[0].keys() %}
+                <th>{{ key }}</th>
+                {% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in results %}
+              <tr>
+                {% for key, value in row.items() %}
+                <td>
+                  {% if key in ['legacy_url', 'candidate_url'] and value %}
+                    <a href="{{ value }}" target="_blank" rel="noopener">{{ value }}</a>
+                  {% elif key == 'combined_score' and value != '' %}
+                    <div class="score-bar"><span style="width: {{ (value * 100)|int }}%"></span></div> {{ value }}
+                  {% else %}
+                    {{ value }}
+                  {% endif %}
+                </td>
+                {% endfor %}
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Export</h3>
+        <div class="export-links">
+          <a class="btn" href="{{ url_for('mapper.download', export_format='xlsx') }}">Download redirect_map.xlsx</a>
+          <a class="btn secondary" href="{{ url_for('mapper.download', export_format='csv') }}">Download high_confidence_redirects.csv</a>
+          <a class="btn secondary" href="{{ url_for('mapper.download', export_format='json') }}">Download redirect_map.json</a>
+        </div>
+      </div>
+      {% endif %}
+    </main>
+  </div>
+
+  <script>
+    async function testConnection() {
+      const btn = document.getElementById('testBtn');
+      const result = document.getElementById('snowflake-result');
+      btn.disabled = true;
+      btn.textContent = 'Testing...';
+      result.style.display = 'none';
+      try {
+        const response = await fetch('/test-connection', { method: 'POST' });
+        const data = await response.json();
+        result.style.display = 'block';
+        result.className = data.success ? 'flash success' : 'flash error';
+        if (data.success) {
+          result.innerHTML = `<strong>Success!</strong> ${data.message}<br><small>User: ${data.user} | DB: ${data.database} | Schema: ${data.schema} | Role: ${data.role || ''} | Warehouse: ${data.warehouse || ''}</small>`;
+        } else {
+          result.innerHTML = `<strong>Error:</strong> ${data.message}`;
+        }
+      } catch (error) {
+        result.style.display = 'block';
+        result.className = 'flash error';
+        result.innerHTML = `<strong>Error:</strong> ${error.message}`;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Test Snowflake Connection';
+      }
+    }
+  </script>
+</body>
+</html>

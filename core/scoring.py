@@ -133,7 +133,7 @@ def pick_winners(combined: pd.DataFrame) -> pd.DataFrame:
         top_score = float(top["combined_score"])
 
         methods = str(top.get("methods", ""))
-        is_ambiguous = top_score < 0.90 or (top_score - second_score) < 0.05
+        is_ambiguous = second_score > 0.0 and (top_score - second_score) < 0.05
 
         rows.append({
             "legacy_url": legacy_url,

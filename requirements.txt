@@ -1,7 +1,13 @@
 Flask==3.0.0
 snowflake-connector-python==3.13.1
 python-dotenv==1.0.0
-cryptography>=42.0.0
+# Pin cryptography < 45 and pyOpenSSL to snowflake's compatible window.
+# cryptography >= 45 bundles OpenSSL 3.5, which dropped X509_V_FLAG_NOTIFY_POLICY;
+# that forces the resolver back to pyOpenSSL < 23.2.0, which still references the
+# removed flag and crashes on import. pyOpenSSL 23.2.0-24.x dropped the reference
+# and require cryptography < 45; snowflake-connector-python caps pyOpenSSL < 25.
+cryptography>=42.0.0,<45
+pyOpenSSL>=24.0.0,<25.0.0
 pandas>=2.2
 numpy>=1.26
 rapidfuzz>=3.9

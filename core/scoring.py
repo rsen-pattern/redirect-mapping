@@ -6,6 +6,8 @@ from urllib.parse import urlparse
 
 import pandas as pd
 
+from core.urls import slug_key
+
 DEFAULT_WEIGHTS_MODE_A: dict[str, float] = {
     "path": 0.15,
     "slug": 0.15,
@@ -53,19 +55,21 @@ def exact_slug_prepass(
             new.copy(),
         )
 
-    # Build slug → list[new_url]
+    # Build key → list[new_url]. The key is content-type-aware
+    # (e.g. "products/pegasus-40") and strips Shopify numeric IDs, so a product
+    # and a collection sharing a last slug never collapse into a false match.
     slug_to_new: dict[str, list[str]] = {}
     for nu in new["address"]:
-        slug = _extract_slug(str(nu))
-        if slug:
-            slug_to_new.setdefault(slug, []).append(str(nu))
+        key = slug_key(str(nu))
+        if key:
+            slug_to_new.setdefault(key, []).append(str(nu))
 
     resolved_rows: list[dict] = []
     remaining_indices: list[int] = []
 
     for idx, row in legacy.iterrows():
-        slug = _extract_slug(str(row["address"]))
-        matches = slug_to_new.get(slug, [])
+        key = slug_key(str(row["address"]))
+        matches = slug_to_new.get(key, [])
         if len(matches) == 1:
             resolved_rows.append({
                 "legacy_url": row["address"],

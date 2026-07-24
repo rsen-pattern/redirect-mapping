@@ -42,7 +42,7 @@ def build_review_xlsx(
         method_col = "methods_contributed" if "methods_contributed" in results_df.columns else None
         if method_col:
             known_methods = [
-                "exact_slug", "path", "slug", "title", "h1", "h2", "inlinks", "mode_b",
+                "domain_swap", "exact_slug", "path", "slug", "title", "h1", "h2", "inlinks", "mode_b",
             ]
             for method in known_methods:
                 mask = results_df[method_col].dropna().apply(
@@ -75,6 +75,8 @@ def build_high_confidence_csv(results_df: pd.DataFrame) -> bytes:
     out = subset[[src_col, dst_col]].rename(
         columns={src_col: "source_url", dst_col: "destination_url"}
     )
+    # Permanent migrations should ship as 301 — make the recommendation explicit.
+    out["redirect_type"] = 301
     return out.to_csv(index=False).encode("utf-8")
 
 

@@ -20,10 +20,12 @@ from core.export import build_high_confidence_csv, build_json, build_review_xlsx
 from core.ingest import (
     apply_mapping,
     auto_map_columns,
+    canonicalize_crawl,
     filter_html_200,
     load_retired_urls,
     read_crawl,
 )
+from core.audit import run_audit
 from core.inlinks import load_inlinks
 from core.matchers import (
     match_h1,
@@ -73,7 +75,8 @@ def apply_ingest(
     mapping: dict[str, str],
 ) -> pd.DataFrame:
     df = apply_mapping(raw_df, mapping)
-    return filter_html_200(df)
+    df = filter_html_200(df)
+    return canonicalize_crawl(df)
 
 
 def load_inlinks_from_bytes(file_bytes: bytes) -> tuple[dict[str, set[str]], pd.DataFrame]:
@@ -122,6 +125,8 @@ def run_mode_a_matching(
         pre_pass_winners["is_ambiguous"] = False
         pre_pass_winners["tier"] = "high"
         winners_df = pd.concat([pre_pass_winners, winners_df], ignore_index=True)
+
+    winners_df = run_audit(winners_df, legacy_df, new_df)
 
     return winners_df, combined_df
 

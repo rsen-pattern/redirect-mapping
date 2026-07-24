@@ -29,10 +29,13 @@ st.set_page_config(
 from core.ingest import (
     apply_mapping,
     auto_map_columns,
+    canonicalize_crawl,
     filter_html_200,
     load_retired_urls,
     read_crawl,
 )
+from core.domain_swap import build_gap_report, domain_swap_match
+from core.audit import build_asset_report, run_audit
 from core.schema import CANONICAL_COLUMNS, REQUIRED_COLUMNS, SCREAMING_FROG_ALIASES
 from core.scoring import (
     DEFAULT_WEIGHTS_MODE_A,
@@ -138,13 +141,25 @@ def _upload_and_ingest(label: str, key: str, mapping_key: str) -> pd.DataFrame |
             st.session_state[mapping_key] = mapping
 
     df = apply_mapping(raw_df, mapping)
+
+    # Capture non-HTML 200 resources (PDFs, images) before they're filtered out —
+    # they still need redirects during a migration.
+    st.session_state[f"{key}_assets"] = build_asset_report(df)
+
     df = filter_html_200(df)
 
     if df.empty:
         st.error("No HTML-200 rows found after filtering. Check your file.")
         return None
 
-    st.success(f"Loaded {len(df):,} HTML-200 rows.")
+    pre_canon = len(df)
+    df = canonicalize_crawl(df)
+    collapsed = pre_canon - len(df)
+
+    msg = f"Loaded {len(df):,} HTML-200 rows."
+    if collapsed > 0:
+        msg += f" ({collapsed:,} query-string/duplicate URL variants collapsed.)"
+    st.success(msg)
     st.dataframe(df.head(5), width='stretch')
     return df
 
@@ -378,15 +393,43 @@ def _render_mode_a(cfg: dict) -> None:
         st.info("Upload both crawl files to continue.")
         return
 
+    # ---- Domain-swap pre-pass (optional) ----
+    with st.expander("🔁 Domain-swap pre-pass (optional)"):
+        st.caption(
+            "If the new site mirrors the old one at a different host (e.g. production → "
+            "staging), swap the domain and confirm the URL exists in the new crawl. "
+            "Deterministic and exact — resolves like-for-like migrations without ambiguity. "
+            "URLs missing from the new crawl are flagged, never dropped."
+        )
+        cfg["domain_swap_enabled"] = st.checkbox(
+            "Enable domain-swap pre-pass", value=False, key="ds_enabled"
+        )
+        cfg["from_domain"] = st.text_input(
+            "Legacy / production domain",
+            placeholder="https://smartq.pureforyou.com",
+            key="ds_from",
+        )
+        cfg["to_domain"] = st.text_input(
+            "New / staging domain",
+            placeholder="https://pfy-native-horizon.myshopify.com",
+            key="ds_to",
+        )
+
     # ---- Run matching ----
     if st.button("▶ Run mechanical matching", type="primary"):
         weights = cfg["weights"]
         pre_pass_df = pd.DataFrame()
+        swap_df = pd.DataFrame()
         remaining_legacy = legacy_df
 
         with st.spinner("Running matching..."):
+            if cfg.get("domain_swap_enabled") and cfg.get("from_domain") and cfg.get("to_domain"):
+                swap_df, remaining_legacy = domain_swap_match(
+                    remaining_legacy, new_df, cfg["from_domain"], cfg["to_domain"]
+                )
+
             if cfg["exact_slug_enabled"]:
-                pre_pass_df, remaining_legacy, _ = exact_slug_prepass(legacy_df, new_df)
+                pre_pass_df, remaining_legacy, _ = exact_slug_prepass(remaining_legacy, new_df)
 
             matcher_dfs = []
             if not remaining_legacy.empty:
@@ -404,14 +447,18 @@ def _render_mode_a(cfg: dict) -> None:
 
             winners_df = pick_winners(combined_df)
 
-            # Merge pre-pass rows
-            if not pre_pass_df.empty:
-                pre_pass_winners = pre_pass_df.rename(columns={"score": "combined_score"})
-                pre_pass_winners["second_score"] = 0.0
-                pre_pass_winners["methods_contributed"] = "exact_slug"
-                pre_pass_winners["is_ambiguous"] = False
-                pre_pass_winners["tier"] = "high"
-                winners_df = pd.concat([pre_pass_winners, winners_df], ignore_index=True)
+            # Merge deterministic pre-passes (domain-swap first, then exact-slug).
+            for pre_df, method in ((swap_df, "domain_swap"), (pre_pass_df, "exact_slug")):
+                if not pre_df.empty:
+                    pre_winners = pre_df.rename(columns={"score": "combined_score"})
+                    pre_winners["second_score"] = 0.0
+                    pre_winners["methods_contributed"] = method
+                    pre_winners["is_ambiguous"] = False
+                    pre_winners["tier"] = "high"
+                    winners_df = pd.concat([pre_winners, winners_df], ignore_index=True)
+
+            # SEO audit: chain/loop, homepage-dump, many-to-one, priority.
+            winners_df = run_audit(winners_df, legacy_df, new_df)
 
             st.session_state.results_df = winners_df
 
@@ -420,6 +467,8 @@ def _render_mode_a(cfg: dict) -> None:
     results_df = st.session_state.get("results_df")
     if results_df is not None and not results_df.empty:
         _render_results(results_df, cfg, mode="migration")
+        _render_gap_report(legacy_df, results_df)
+        _render_asset_report()
 
 
 # ---------------------------------------------------------------------------
@@ -560,11 +609,91 @@ def _render_mode_b(cfg: dict) -> None:
 # Results display
 # ---------------------------------------------------------------------------
 
+def _render_asset_report() -> None:
+    """Show non-HTML 200 resources (PDFs, images) that also need redirects."""
+    legacy_assets = st.session_state.get("legacy_assets")
+    if legacy_assets is None or legacy_assets.empty:
+        return
+    with st.expander(f"📎 Non-HTML resources — {len(legacy_assets):,} assets that also need redirects"):
+        st.caption(
+            "The HTML-200 filter drops PDFs, images and other assets, but they still "
+            "need redirects or they become broken links. Map these separately."
+        )
+        st.dataframe(legacy_assets, width='stretch')
+        st.download_button(
+            "📥 Download asset list (CSV)",
+            legacy_assets.to_csv(index=False).encode("utf-8"),
+            "assets_needing_redirects.csv",
+            "text/csv",
+        )
+
+
+def _render_audit_warnings(results_df: pd.DataFrame) -> None:
+    """Summarise SEO audit flags raised on the redirect map."""
+    if "flags" not in results_df.columns:
+        return
+    exploded = results_df["flags"].fillna("").str.split(";").explode().str.strip()
+    counts = {
+        "🔁 Loops (target = source)": (exploded == "loop").sum(),
+        "⛓️ Chains (target is also a source)": (exploded == "chain").sum(),
+        "🏠 Homepage redirects (soft-404 risk)": (exploded == "homepage_redirect").sum(),
+        "📦 Many-to-one concentration": exploded.str.startswith("many_to_one").sum(),
+        "⭐ High-value URLs unmatched": (exploded == "high_value_unmatched").sum(),
+        "❓ Target not in new crawl": (exploded == "target_not_in_new_crawl").sum(),
+    }
+    total = sum(int(v) for v in counts.values())
+    if total == 0:
+        return
+    with st.expander(f"⚠️ Audit warnings — {total:,} flagged (review before launch)"):
+        st.caption(
+            "SEO risks the redirect literature warns about. None block launch, but each "
+            "flagged row is worth a look — especially loops, chains and homepage dumps."
+        )
+        for label, n in counts.items():
+            if n:
+                st.markdown(f"- **{label}:** {int(n):,}")
+        flagged = results_df[results_df["flags"].fillna("") != ""]
+        st.dataframe(
+            flagged[[c for c in ["legacy_url", "candidate_url", "tier", "priority", "flags"] if c in flagged.columns]],
+            width='stretch',
+        )
+
+
+def _render_gap_report(legacy_df: pd.DataFrame, results_df: pd.DataFrame) -> None:
+    """Show live legacy URLs left without a confident redirect target."""
+    if legacy_df is None or legacy_df.empty:
+        return
+
+    if "tier" in results_df.columns:
+        matched = set(results_df.loc[results_df["tier"].isin(["high", "review"]), "legacy_url"])
+    else:
+        matched = set(results_df.get("legacy_url", pd.Series(dtype=str)))
+
+    gap = build_gap_report(legacy_df, matched)
+
+    with st.expander(f"🕳️ Coverage gap — {len(gap):,} live URLs with no confident redirect"):
+        st.caption(
+            "Legacy HTML-200 URLs with no high/review-tier target, after removing pagination, "
+            "assets and cart/checkout/account/api paths. These need a manual redirect decision "
+            "rather than being silently dropped."
+        )
+        if gap.empty:
+            st.success("No gaps — every live URL has a confident redirect target.")
+        else:
+            st.dataframe(gap, width='stretch')
+            st.download_button(
+                "📥 Download coverage gap (CSV)",
+                gap.to_csv(index=False).encode("utf-8"),
+                "coverage_gap.csv",
+                "text/csv",
+            )
+
+
 def _render_results(results_df: pd.DataFrame, cfg: dict, mode: str) -> None:
     st.divider()
     st.subheader("Results")
 
-    pre_pass_count = int((results_df.get("methods_contributed", pd.Series(dtype=str)) == "exact_slug").sum()) if "methods_contributed" in results_df.columns else 0
+    pre_pass_count = int(results_df.get("methods_contributed", pd.Series(dtype=str)).isin(["exact_slug", "domain_swap"]).sum()) if "methods_contributed" in results_df.columns else 0
     high_count = int((results_df.get("tier", pd.Series(dtype=str)) == "high").sum()) if "tier" in results_df.columns else 0
     review_count = int((results_df.get("tier", pd.Series(dtype=str)) == "review").sum()) if "tier" in results_df.columns else 0
     no_match_count = int((results_df.get("tier", pd.Series(dtype=str)) == "no_match").sum()) if "tier" in results_df.columns else 0
@@ -577,8 +706,10 @@ def _render_results(results_df: pd.DataFrame, cfg: dict, mode: str) -> None:
     m4.metric("No match (<0.70)", f"{no_match_count:,}")
     m5.metric("Ambiguous (AI-eligible)", f"{ambiguous_count:,}")
 
+    _render_audit_warnings(results_df)
+
     # Results table
-    display_cols = [c for c in ["legacy_url", "candidate_url", "combined_score", "tier", "methods_contributed", "is_ambiguous"] if c in results_df.columns]
+    display_cols = [c for c in ["legacy_url", "candidate_url", "combined_score", "tier", "priority", "methods_contributed", "is_ambiguous", "flags"] if c in results_df.columns]
     col_config = {}
     if "combined_score" in results_df.columns:
         col_config["combined_score"] = st.column_config.ProgressColumn(

@@ -11,6 +11,7 @@ from core.schema import (
     _OPTIONAL_NUMERIC_COLS,
     _OPTIONAL_TEXT_COLS,
 )
+from core.urls import canonicalize_url
 
 
 def read_crawl(file, filename: str | None = None) -> pd.DataFrame:
@@ -95,6 +96,22 @@ def filter_html_200(df: pd.DataFrame) -> pd.DataFrame:
     if "content_type" in df.columns:
         df = df[df["content_type"].astype(str).str.contains("html", case=False, na=False)]
     return df.reset_index(drop=True)
+
+
+def canonicalize_crawl(df: pd.DataFrame) -> pd.DataFrame:
+    """Canonicalise the ``address`` column and drop duplicate addresses.
+
+    Strips query strings/fragments, collapses Shopify collection-context product
+    URLs, and normalises trailing slashes so the candidate index is free of the
+    ``?section_id=`` / ``?preview_theme_id=`` noise that inflates a staging crawl.
+    The first occurrence of each canonical address is kept.
+    """
+    if df is None or df.empty or "address" not in df.columns:
+        return df
+    df = df.copy()
+    df["address"] = df["address"].astype(str).map(canonicalize_url)
+    df = df.drop_duplicates(subset="address", keep="first").reset_index(drop=True)
+    return df
 
 
 def load_retired_urls(file) -> pd.DataFrame:

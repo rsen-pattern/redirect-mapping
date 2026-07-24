@@ -75,6 +75,8 @@ def build_high_confidence_csv(results_df: pd.DataFrame) -> bytes:
     out = subset[[src_col, dst_col]].rename(
         columns={src_col: "source_url", dst_col: "destination_url"}
     )
+    # Permanent migrations should ship as 301 — make the recommendation explicit.
+    out["redirect_type"] = 301
     return out.to_csv(index=False).encode("utf-8")
 
 

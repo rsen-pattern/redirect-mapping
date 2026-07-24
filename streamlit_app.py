@@ -35,6 +35,7 @@ from core.ingest import (
     read_crawl,
 )
 from core.domain_swap import build_gap_report, domain_swap_match
+from core.audit import build_asset_report, run_audit
 from core.schema import CANONICAL_COLUMNS, REQUIRED_COLUMNS, SCREAMING_FROG_ALIASES
 from core.scoring import (
     DEFAULT_WEIGHTS_MODE_A,
@@ -140,6 +141,11 @@ def _upload_and_ingest(label: str, key: str, mapping_key: str) -> pd.DataFrame |
             st.session_state[mapping_key] = mapping
 
     df = apply_mapping(raw_df, mapping)
+
+    # Capture non-HTML 200 resources (PDFs, images) before they're filtered out —
+    # they still need redirects during a migration.
+    st.session_state[f"{key}_assets"] = build_asset_report(df)
+
     df = filter_html_200(df)
 
     if df.empty:
@@ -451,6 +457,9 @@ def _render_mode_a(cfg: dict) -> None:
                     pre_winners["tier"] = "high"
                     winners_df = pd.concat([pre_winners, winners_df], ignore_index=True)
 
+            # SEO audit: chain/loop, homepage-dump, many-to-one, priority.
+            winners_df = run_audit(winners_df, legacy_df, new_df)
+
             st.session_state.results_df = winners_df
 
         st.success("Matching complete.")
@@ -459,6 +468,7 @@ def _render_mode_a(cfg: dict) -> None:
     if results_df is not None and not results_df.empty:
         _render_results(results_df, cfg, mode="migration")
         _render_gap_report(legacy_df, results_df)
+        _render_asset_report()
 
 
 # ---------------------------------------------------------------------------
@@ -599,6 +609,56 @@ def _render_mode_b(cfg: dict) -> None:
 # Results display
 # ---------------------------------------------------------------------------
 
+def _render_asset_report() -> None:
+    """Show non-HTML 200 resources (PDFs, images) that also need redirects."""
+    legacy_assets = st.session_state.get("legacy_assets")
+    if legacy_assets is None or legacy_assets.empty:
+        return
+    with st.expander(f"📎 Non-HTML resources — {len(legacy_assets):,} assets that also need redirects"):
+        st.caption(
+            "The HTML-200 filter drops PDFs, images and other assets, but they still "
+            "need redirects or they become broken links. Map these separately."
+        )
+        st.dataframe(legacy_assets, width='stretch')
+        st.download_button(
+            "📥 Download asset list (CSV)",
+            legacy_assets.to_csv(index=False).encode("utf-8"),
+            "assets_needing_redirects.csv",
+            "text/csv",
+        )
+
+
+def _render_audit_warnings(results_df: pd.DataFrame) -> None:
+    """Summarise SEO audit flags raised on the redirect map."""
+    if "flags" not in results_df.columns:
+        return
+    exploded = results_df["flags"].fillna("").str.split(";").explode().str.strip()
+    counts = {
+        "🔁 Loops (target = source)": (exploded == "loop").sum(),
+        "⛓️ Chains (target is also a source)": (exploded == "chain").sum(),
+        "🏠 Homepage redirects (soft-404 risk)": (exploded == "homepage_redirect").sum(),
+        "📦 Many-to-one concentration": exploded.str.startswith("many_to_one").sum(),
+        "⭐ High-value URLs unmatched": (exploded == "high_value_unmatched").sum(),
+        "❓ Target not in new crawl": (exploded == "target_not_in_new_crawl").sum(),
+    }
+    total = sum(int(v) for v in counts.values())
+    if total == 0:
+        return
+    with st.expander(f"⚠️ Audit warnings — {total:,} flagged (review before launch)"):
+        st.caption(
+            "SEO risks the redirect literature warns about. None block launch, but each "
+            "flagged row is worth a look — especially loops, chains and homepage dumps."
+        )
+        for label, n in counts.items():
+            if n:
+                st.markdown(f"- **{label}:** {int(n):,}")
+        flagged = results_df[results_df["flags"].fillna("") != ""]
+        st.dataframe(
+            flagged[[c for c in ["legacy_url", "candidate_url", "tier", "priority", "flags"] if c in flagged.columns]],
+            width='stretch',
+        )
+
+
 def _render_gap_report(legacy_df: pd.DataFrame, results_df: pd.DataFrame) -> None:
     """Show live legacy URLs left without a confident redirect target."""
     if legacy_df is None or legacy_df.empty:
@@ -646,8 +706,10 @@ def _render_results(results_df: pd.DataFrame, cfg: dict, mode: str) -> None:
     m4.metric("No match (<0.70)", f"{no_match_count:,}")
     m5.metric("Ambiguous (AI-eligible)", f"{ambiguous_count:,}")
 
+    _render_audit_warnings(results_df)
+
     # Results table
-    display_cols = [c for c in ["legacy_url", "candidate_url", "combined_score", "tier", "methods_contributed", "is_ambiguous"] if c in results_df.columns]
+    display_cols = [c for c in ["legacy_url", "candidate_url", "combined_score", "tier", "priority", "methods_contributed", "is_ambiguous", "flags"] if c in results_df.columns]
     col_config = {}
     if "combined_score" in results_df.columns:
         col_config["combined_score"] = st.column_config.ProgressColumn(

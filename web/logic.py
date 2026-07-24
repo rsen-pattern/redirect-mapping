@@ -20,6 +20,7 @@ from core.export import build_high_confidence_csv, build_json, build_review_xlsx
 from core.ingest import (
     apply_mapping,
     auto_map_columns,
+    canonicalize_crawl,
     filter_html_200,
     load_retired_urls,
     read_crawl,
@@ -73,7 +74,8 @@ def apply_ingest(
     mapping: dict[str, str],
 ) -> pd.DataFrame:
     df = apply_mapping(raw_df, mapping)
-    return filter_html_200(df)
+    df = filter_html_200(df)
+    return canonicalize_crawl(df)
 
 
 def load_inlinks_from_bytes(file_bytes: bytes) -> tuple[dict[str, set[str]], pd.DataFrame]:

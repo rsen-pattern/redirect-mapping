@@ -29,10 +29,12 @@ st.set_page_config(
 from core.ingest import (
     apply_mapping,
     auto_map_columns,
+    canonicalize_crawl,
     filter_html_200,
     load_retired_urls,
     read_crawl,
 )
+from core.domain_swap import build_gap_report, domain_swap_match
 from core.schema import CANONICAL_COLUMNS, REQUIRED_COLUMNS, SCREAMING_FROG_ALIASES
 from core.scoring import (
     DEFAULT_WEIGHTS_MODE_A,
@@ -144,7 +146,14 @@ def _upload_and_ingest(label: str, key: str, mapping_key: str) -> pd.DataFrame |
         st.error("No HTML-200 rows found after filtering. Check your file.")
         return None
 
-    st.success(f"Loaded {len(df):,} HTML-200 rows.")
+    pre_canon = len(df)
+    df = canonicalize_crawl(df)
+    collapsed = pre_canon - len(df)
+
+    msg = f"Loaded {len(df):,} HTML-200 rows."
+    if collapsed > 0:
+        msg += f" ({collapsed:,} query-string/duplicate URL variants collapsed.)"
+    st.success(msg)
     st.dataframe(df.head(5), width='stretch')
     return df
 
@@ -378,15 +387,43 @@ def _render_mode_a(cfg: dict) -> None:
         st.info("Upload both crawl files to continue.")
         return
 
+    # ---- Domain-swap pre-pass (optional) ----
+    with st.expander("🔁 Domain-swap pre-pass (optional)"):
+        st.caption(
+            "If the new site mirrors the old one at a different host (e.g. production → "
+            "staging), swap the domain and confirm the URL exists in the new crawl. "
+            "Deterministic and exact — resolves like-for-like migrations without ambiguity. "
+            "URLs missing from the new crawl are flagged, never dropped."
+        )
+        cfg["domain_swap_enabled"] = st.checkbox(
+            "Enable domain-swap pre-pass", value=False, key="ds_enabled"
+        )
+        cfg["from_domain"] = st.text_input(
+            "Legacy / production domain",
+            placeholder="https://smartq.pureforyou.com",
+            key="ds_from",
+        )
+        cfg["to_domain"] = st.text_input(
+            "New / staging domain",
+            placeholder="https://pfy-native-horizon.myshopify.com",
+            key="ds_to",
+        )
+
     # ---- Run matching ----
     if st.button("▶ Run mechanical matching", type="primary"):
         weights = cfg["weights"]
         pre_pass_df = pd.DataFrame()
+        swap_df = pd.DataFrame()
         remaining_legacy = legacy_df
 
         with st.spinner("Running matching..."):
+            if cfg.get("domain_swap_enabled") and cfg.get("from_domain") and cfg.get("to_domain"):
+                swap_df, remaining_legacy = domain_swap_match(
+                    remaining_legacy, new_df, cfg["from_domain"], cfg["to_domain"]
+                )
+
             if cfg["exact_slug_enabled"]:
-                pre_pass_df, remaining_legacy, _ = exact_slug_prepass(legacy_df, new_df)
+                pre_pass_df, remaining_legacy, _ = exact_slug_prepass(remaining_legacy, new_df)
 
             matcher_dfs = []
             if not remaining_legacy.empty:
@@ -404,14 +441,15 @@ def _render_mode_a(cfg: dict) -> None:
 
             winners_df = pick_winners(combined_df)
 
-            # Merge pre-pass rows
-            if not pre_pass_df.empty:
-                pre_pass_winners = pre_pass_df.rename(columns={"score": "combined_score"})
-                pre_pass_winners["second_score"] = 0.0
-                pre_pass_winners["methods_contributed"] = "exact_slug"
-                pre_pass_winners["is_ambiguous"] = False
-                pre_pass_winners["tier"] = "high"
-                winners_df = pd.concat([pre_pass_winners, winners_df], ignore_index=True)
+            # Merge deterministic pre-passes (domain-swap first, then exact-slug).
+            for pre_df, method in ((swap_df, "domain_swap"), (pre_pass_df, "exact_slug")):
+                if not pre_df.empty:
+                    pre_winners = pre_df.rename(columns={"score": "combined_score"})
+                    pre_winners["second_score"] = 0.0
+                    pre_winners["methods_contributed"] = method
+                    pre_winners["is_ambiguous"] = False
+                    pre_winners["tier"] = "high"
+                    winners_df = pd.concat([pre_winners, winners_df], ignore_index=True)
 
             st.session_state.results_df = winners_df
 
@@ -420,6 +458,7 @@ def _render_mode_a(cfg: dict) -> None:
     results_df = st.session_state.get("results_df")
     if results_df is not None and not results_df.empty:
         _render_results(results_df, cfg, mode="migration")
+        _render_gap_report(legacy_df, results_df)
 
 
 # ---------------------------------------------------------------------------
@@ -560,11 +599,41 @@ def _render_mode_b(cfg: dict) -> None:
 # Results display
 # ---------------------------------------------------------------------------
 
+def _render_gap_report(legacy_df: pd.DataFrame, results_df: pd.DataFrame) -> None:
+    """Show live legacy URLs left without a confident redirect target."""
+    if legacy_df is None or legacy_df.empty:
+        return
+
+    if "tier" in results_df.columns:
+        matched = set(results_df.loc[results_df["tier"].isin(["high", "review"]), "legacy_url"])
+    else:
+        matched = set(results_df.get("legacy_url", pd.Series(dtype=str)))
+
+    gap = build_gap_report(legacy_df, matched)
+
+    with st.expander(f"🕳️ Coverage gap — {len(gap):,} live URLs with no confident redirect"):
+        st.caption(
+            "Legacy HTML-200 URLs with no high/review-tier target, after removing pagination, "
+            "assets and cart/checkout/account/api paths. These need a manual redirect decision "
+            "rather than being silently dropped."
+        )
+        if gap.empty:
+            st.success("No gaps — every live URL has a confident redirect target.")
+        else:
+            st.dataframe(gap, width='stretch')
+            st.download_button(
+                "📥 Download coverage gap (CSV)",
+                gap.to_csv(index=False).encode("utf-8"),
+                "coverage_gap.csv",
+                "text/csv",
+            )
+
+
 def _render_results(results_df: pd.DataFrame, cfg: dict, mode: str) -> None:
     st.divider()
     st.subheader("Results")
 
-    pre_pass_count = int((results_df.get("methods_contributed", pd.Series(dtype=str)) == "exact_slug").sum()) if "methods_contributed" in results_df.columns else 0
+    pre_pass_count = int(results_df.get("methods_contributed", pd.Series(dtype=str)).isin(["exact_slug", "domain_swap"]).sum()) if "methods_contributed" in results_df.columns else 0
     high_count = int((results_df.get("tier", pd.Series(dtype=str)) == "high").sum()) if "tier" in results_df.columns else 0
     review_count = int((results_df.get("tier", pd.Series(dtype=str)) == "review").sum()) if "tier" in results_df.columns else 0
     no_match_count = int((results_df.get("tier", pd.Series(dtype=str)) == "no_match").sum()) if "tier" in results_df.columns else 0

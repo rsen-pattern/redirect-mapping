@@ -42,7 +42,7 @@ def build_review_xlsx(
         method_col = "methods_contributed" if "methods_contributed" in results_df.columns else None
         if method_col:
             known_methods = [
-                "exact_slug", "path", "slug", "title", "h1", "h2", "inlinks", "mode_b",
+                "domain_swap", "exact_slug", "path", "slug", "title", "h1", "h2", "inlinks", "mode_b",
             ]
             for method in known_methods:
                 mask = results_df[method_col].dropna().apply(
